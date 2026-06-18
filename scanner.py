@@ -1,5 +1,7 @@
 import yfinance as yf
 from datetime import datetime
+import os
+import requests
 
 stocks = [
     "NVDA","AMD","PLTR","TSLA","SOFI","AAPL",
@@ -10,6 +12,12 @@ stocks = [
     "UNH","LLY","JNJ",
     "COIN","SHOP"
 ]
+
+WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK")
+
+def send_to_discord(message):
+    if WEBHOOK_URL:
+        requests.post(WEBHOOK_URL, json={"content": message})
 
 def score_stock(ticker):
     try:
@@ -23,55 +31,49 @@ def score_stock(ticker):
         volume = hist["Volume"]
 
         price = close.iloc[-1]
-
         if price < 5:
             return 0
 
         sma50 = close.rolling(50).mean().iloc[-1]
-
         if str(sma50) == "nan":
             return 0
 
-        # --- VOLUME SPIKE ---
         avg_volume = volume.rolling(20).mean().iloc[-1]
         today_volume = volume.iloc[-1]
         volume_ratio = today_volume / avg_volume if avg_volume > 0 else 0
 
-        # --- CONSOLIDATION CHECK (NEW) ---
-        # how tight the last 20 days were
         recent_high = close.iloc[-20:].max()
         recent_low = close.iloc[-20:].min()
         range_percent = (recent_high - recent_low) / price
 
         score = 0
 
-        # --- TREND FILTER ---
+        # Trend
         if price > sma50:
             score += 3
         elif price > sma50 * 0.97:
             score += 2
 
-        # --- MOMENTUM ---
+        # Momentum
         if price > close.iloc[-10]:
             score += 2
 
-        # --- BREAKOUT PRESSURE ---
+        # Breakout pressure
         if price > recent_high * 0.98:
             score += 1
 
-        # --- CONFIRMATION ---
+        # Confirmation
         if close.iloc[-1] > close.iloc[-20]:
             score += 1
 
-        # --- VOLUME SPIKE ---
+        # Volume spike
         if volume_ratio >= 1.5:
             score += 2
         elif volume_ratio >= 1.2:
             score += 1
 
-        # --- CONSOLIDATION BONUS (NEW) ---
-        # tighter range = better breakout setup
-        if range_percent < 0.08:   # 8% range over 20 days = tight
+        # Consolidation
+        if range_percent < 0.08:
             score += 2
         elif range_percent < 0.12:
             score += 1
@@ -102,25 +104,14 @@ results.sort(key=lambda x: x[1], reverse=True)
 
 now = datetime.now().strftime("%Y-%m-%d %H:%M")
 
-print(f"\nSTOCK SCAN REPORT ({now})\n")
+# TOP 5 ONLY (clean alerts)
+top = results[:5]
 
-for r in results:
-    print(f"{r[0]}: Score {r[1]} — {r[2]}")
+output = f"📊 STOCK SCAN ({now})\n\nTOP SETUPS:\n\n"
 
-print("\nTOP 5 SETUPS:\n")
+for r in top:
+    output += f"{r[0]}: Score {r[1]} — {r[2]}\n"
 
-for r in results[:5]:
-    print(f"{r[0]}: Score {r[1]} — {r[2]}")
+print(output)
 
-with open("scan_results.txt", "w") as f:
-    f.write(f"STOCK SCAN REPORT ({now})\n\n")
-
-    for r in results:
-        f.write(f"{r[0]}: Score {r[1]} — {r[2]}\n")
-
-    f.write("\nTOP 5 SETUPS:\n\n")
-
-    for r in results[:5]:
-        f.write(f"{r[0]}: Score {r[1]} — {r[2]}\n")
-
-print("\nSaved to scan_results.txt")
+send_to_discord(output)
