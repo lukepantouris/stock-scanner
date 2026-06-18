@@ -2,26 +2,45 @@ name: Daily Stock Scanner
 
 on:
   schedule:
-    - cron: "0 14 * * *"  # 10:00 AM EST (2:00 PM UTC)
+    - cron: "0 14 * * 1-5" # 10:00 AM EST, Monday-Friday
   workflow_dispatch:
+
+concurrency:
+  group: stock-scanner
+  cancel-in-progress: true
 
 jobs:
   run-scanner:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Set Up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Install dependencies
-        run: pip install yfinance requests
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
 
-      - name: Run scanner
-        env:
-          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
-        run: python scanner.py
+      - name: Run Stock Scanner
+        run: |
+          python scanner.py
+
+      - name: Upload Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stock-scan-results
+          path: |
+            results/
+            *.csv
+            *.txt
+            *.json
+          if-no-files-found: ignore
