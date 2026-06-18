@@ -22,4 +22,6 @@ jobs:
         run: pip install yfinance requests
 
       - name: Run scanner
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
         run: python scanner.py
